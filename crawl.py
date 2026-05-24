@@ -30,11 +30,18 @@ def get_item_info(item_id):
         resp = requests.get(url, headers=headers, timeout=10)
         resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
+
         item = {"id": item_id}
 
+        # 아이템명
         name_el = soup.select_one(".search-page-title .text-bold.fs-5")
         item["name"] = name_el.text.strip() if name_el else ""
 
+        if not item["name"]:
+            return None
+
+        # 기본 섹션 - 모든 key/value 저장
+        basic = {}
         info_boxes = soup.select(".search-page-info-content-box-default-box")
         for box in info_boxes:
             h4 = box.select_one("h4")
@@ -42,58 +49,42 @@ def get_item_info(item_id):
             if h4 and span:
                 key = h4.text.strip()
                 val = span.text.strip()
-                if key == "LEVEL":
-                    item["req_level"] = int(val) if val.isdigit() else 0
-                elif key == "DEX":
-                    item["req_dex"] = int(val) if val.isdigit() else 0
-                elif key == "LUK":
-                    item["req_luk"] = int(val) if val.isdigit() else 0
-                elif key == "INT":
-                    item["req_int"] = int(val) if val.isdigit() else 0
-                elif key == "STR":
-                    item["req_str"] = int(val) if val.isdigit() else 0
+                basic[key] = val
 
-        detail_boxes = soup.select(".search-page-info-content-box-detail")
-        for box in detail_boxes:
+        # 기본 섹션 - detail 형태도 포함
+        detail_in_basic = soup.select(".search-page-info-content-box-default")
+        for box in detail_in_basic:
             h4 = box.select_one("h4")
             span = box.select_one("span")
             if h4 and span:
                 key = h4.text.strip()
                 val = span.text.strip()
-                if key == "직업":
-                    item["job"] = val
-                elif key == "분류":
-                    item["category"] = val
-                elif key == "주 카테고리":
-                    item["main_category"] = val
-                elif key == "부 카테고리":
-                    item["sub_category"] = val
-                elif key == "성별":
-                    item["gender"] = val
-                elif key == "STR":
-                    item["str"] = parse_stat(val)
-                elif key == "DEX":
-                    item["dex"] = parse_stat(val)
-                elif key == "INT":
-                    item["int"] = parse_stat(val)
-                elif key == "LUK":
-                    item["luk"] = parse_stat(val)
-                elif key == "공격력":
-                    item["attack"] = parse_stat(val)
-                elif key == "마력":
-                    item["magic"] = parse_stat(val)
-                elif key == "이동속도":
-                    item["speed"] = parse_stat(val)
+                basic[key] = val
+
+        item["기본"] = basic
+
+        # 세부 섹션 - 모든 key/value 저장
+        detail = {}
+        # 두 번째 info-content-box가 세부
+        info_content_boxes = soup.select(".search-page-info-content-box")
+        if len(info_content_boxes) >= 2:
+            detail_box = info_content_boxes[1]
+            detail_items = detail_box.select(".search-page-info-content-box-detail")
+            for box in detail_items:
+                h4 = box.select_one("h4")
+                span = box.select_one("span")
+                if h4 and span:
+                    key = h4.text.strip()
+                    val = span.text.strip()
+                    detail[key] = val
+
+        item["세부"] = detail
 
         return item
 
     except Exception as e:
         print(f"오류 [{item_id}]: {e}")
         return None
-
-def parse_stat(val):
-    match = re.match(r"(\d+)", val.strip())
-    return int(match.group(1)) if match else 0
 
 def main():
     print("mapledb.kr 크롤링 시작...")
@@ -104,7 +95,7 @@ def main():
     for i, item_id in enumerate(all_ids):
         print(f"[{i+1}/{total}] ID: {item_id} 크롤링 중...")
         item = get_item_info(item_id)
-        if item and item.get("name"):
+        if item:
             results.append(item)
             print(f"  → {item['name']} 저장")
         time.sleep(0.3)
